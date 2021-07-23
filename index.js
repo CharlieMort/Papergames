@@ -9,11 +9,13 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-app.use(express.static(path.join(__dirname, './build')));
+if (!(!process.env.NODE_ENV || process.env.NODE_ENV === "development")) {
+    app.use(express.static(path.join(__dirname, './build')));
 
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, './build/index.html'));
-});
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, './build/index.html'));
+    });
+}
 
 const server = http.createServer(app);
 const io = socketIO(server, {
