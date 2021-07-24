@@ -3,6 +3,7 @@ const cors = require("cors");
 const http = require("http");
 const socketIO = require("socket.io");
 const path = require("path");
+const e = require("cors");
 
 const PORT = process.env.PORT || 5000;
 const app = express();
@@ -34,12 +35,13 @@ const rooms = {
 }
 
 const codes = [];
+const battleships = [5,4,4,3,2];
 
 function MakeID() {
     const characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const len = 5;
     let code = "";
-    for (let i = 0; i<5; i++) {
+    for (let i = 0; i<len; i++) {
         code += characters.charAt(Math.floor(Math.random()*characters.length));
     }
     return code;
@@ -58,43 +60,79 @@ function GenerateRandomMap() {
         ["","","","","","","","","",""],
         ["","","","","","","","","",""]
     ];
-    let ships = [4, 4, 5, 3, 2];
+    let ships = [...battleships];
     while(ships.length>0) {
         let x = Math.floor(Math.random()*10);
         let y = Math.floor(Math.random()*10);
 
         let shipLength = ships[ships.length-1];
-
-        if (y+shipLength < 10) { // If ship can fit downwards
-            let overlap = false;
-            for (let i = 0; i<shipLength; i++) { // does it overlap a pre existing ship
-                if (map[y+i][x] === "ship") {
-                    overlap = true;
-                    break;
+        let verticalOrHorizontal = Math.floor(Math.random()*2);
+        if (verticalOrHorizontal === 0) { // Vertical First
+            if (y+shipLength < 10) { // If ship can fit downwards
+                let overlap = false;
+                for (let i = 0; i<shipLength; i++) { // does it overlap a pre existing ship
+                    if (map[y+i][x].length > 4) {
+                        overlap = true;
+                        break;
+                    }
+                }
+                if (!overlap) {
+                    for (let i = 0; i<shipLength; i++) { // place ship
+                        map[y+i][x] = `ship _${ships.length-1}`;
+                    }
+                    ships.pop();
+                    continue; // skip next if's
                 }
             }
-            if (!overlap) {
-                for (let i = 0; i<shipLength; i++) { // place ship
-                    map[y+i][x] = "ship";
+            if (x+shipLength < 10) { // If ship can fit right
+                let overlap = false;
+                for (let i = 0; i<shipLength; i++) { // does it overlap a pre existing ship
+                    if (map[y][x+i].length > 4) {
+                        overlap = true;
+                        break;
+                    }
                 }
-                ships.pop();
-                continue; // skip next if's
+                if (!overlap) {
+                    for (let i = 0; i<shipLength; i++) { // place ship
+                        map[y][x+i] = `ship _${ships.length-1}`;
+                    }
+                    ships.pop();
+                    continue; // skip next if's
+                }
             }
         }
-        if (x+shipLength < 10) { // If ship can fit right
-            let overlap = false;
-            for (let i = 0; i<shipLength; i++) { // does it overlap a pre existing ship
-                if (map[y][x+i] === "ship") {
-                    overlap = true;
-                    break;
+        else {
+            if (x+shipLength < 10) { // If ship can fit right
+                let overlap = false;
+                for (let i = 0; i<shipLength; i++) { // does it overlap a pre existing ship
+                    if (map[y][x+i].length > 4) {
+                        overlap = true;
+                        break;
+                    }
+                }
+                if (!overlap) {
+                    for (let i = 0; i<shipLength; i++) { // place ship
+                        map[y][x+i] = `ship _${ships.length-1}`;
+                    }
+                    ships.pop();
+                    continue; // skip next if's
                 }
             }
-            if (!overlap) {
-                for (let i = 0; i<shipLength; i++) { // place ship
-                    map[y][x+i] = "ship";
+            if (y+shipLength < 10) { // If ship can fit downwards
+                let overlap = false;
+                for (let i = 0; i<shipLength; i++) { // does it overlap a pre existing ship
+                    if (map[y+i][x].length > 4) {
+                        overlap = true;
+                        break;
+                    }
                 }
-                ships.pop();
-                continue; // skip next if's
+                if (!overlap) {
+                    for (let i = 0; i<shipLength; i++) { // place ship
+                        map[y+i][x] = `ship _${ships.length-1}`;
+                    }
+                    ships.pop();
+                    continue; // skip next if's
+                }
             }
         }
     }
@@ -206,7 +244,8 @@ function Battleship_Restart(code) {
 }
 
 function Battleship_CheckForWinners(code) {
-    let shipCount = 18;
+    let shipCount = 0;
+    battleships.map((shipNum) => shipCount+=shipNum);
     rooms.battleship[code].players.map((player, idx) => {
         if (player.shots.length >= shipCount) {
             let shipsLeft = shipCount;
@@ -224,8 +263,32 @@ function Battleship_CheckForWinners(code) {
 }
 
 function Battleship_Shoot(code, coords) {
-    rooms.battleship[code].players[rooms.battleship[code].turn].shots.push(coords);
-    rooms.battleship[code].turn = rooms.battleship[code].turn===0?1:0;
+    rooms.battleship[code].players[rooms.battleship[code].turn].shots.push(coords); // add shot to record
+    rooms.battleship[code].turn = rooms.battleship[code].turn===0?1:0; // change to enemy turn
+    let shotCounter = [0,0,0,0,0];
+    let room = rooms.battleship[code];
+    room.players[room.turn===0?1:0].shots.map((shot) => { // Loop through shots the one who last shot
+        let val = room.players[room.turn].map[shot[1]][shot[0]];
+        if (val.length > 4) {
+            let num = parseInt(val.split(" ")[1].split("")[1]);
+            if (!isNaN(num)) {
+                shotCounter[num]++;
+                if (shotCounter[num] === battleships[num]) {
+                    room.players[room.turn===0?1:0].shots.map((shot2) => {
+                        let val2 = room.players[room.turn].map[shot2[1]][shot2[0]];
+                        if (val2.length > 4) {
+                            let num2 = parseInt(val2.split(" ")[1].split("")[1]);
+                            if (!isNaN(num2)) {
+                                if (num === num2) {
+                                    rooms.battleship[code].players[room.turn].map[shot2[1]][shot2[0]] = "ship DEAD";
+                                }
+                            }
+                        }
+                    })
+                }
+            }
+        }
+    })
     Battleship_CheckForWinners(code);
     SendRoomInfo(code, "battleship");
 }
