@@ -1,9 +1,9 @@
+console.log("first");
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
 const socketIO = require("socket.io");
 const path = require("path");
-const e = require("cors");
 
 const PORT = process.env.PORT || 5000;
 const app = express();
@@ -17,6 +17,10 @@ if (!(!process.env.NODE_ENV || process.env.NODE_ENV === "development")) {
         res.sendFile(path.join(__dirname, './build/index.html'));
     });
 }
+
+console.log("before")
+const userRouter = require("./routes/user");
+app.use("/api/user", userRouter);
 
 const server = http.createServer(app);
 const io = socketIO(server, {
@@ -35,7 +39,7 @@ const rooms = {
 }
 
 const codes = [];
-const battleships = [5,4,4,3,2];
+const battleships = [3,2];
 
 function MakeID() {
     const characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -167,13 +171,15 @@ function Battleship_CreateRoom() {
                 id: "",
                 map: GenerateRandomMap(),
                 shots: [],
-                rematch: false
+                rematch: false,
+                user: {}
             },
             {
                 id: "",
                 map: GenerateRandomMap(),
                 shots: [],
-                rematch: false
+                rematch: false,
+                user: {}
             }
         ]
     }
@@ -182,9 +188,11 @@ function Battleship_CreateRoom() {
 
 function JoinRoom(game, code, player) {
     if (rooms[game][code].players[0].id === "") {
-        rooms[game][code].players[0].id = player.id;
-        io.to(player.id).emit("index", 0);
-        player.join(code);
+        rooms[game][code].players[0].id = player.socket.id;
+        rooms[game][code].players[0].user = player.user;
+        console.log(player.user);
+        io.to(player.socket.id).emit("index", 0);
+        player.socket.join(code);
         if (rooms[game][code].players[1].id !== "") {
             SendRoomInfo(code, game);
         }
@@ -196,9 +204,10 @@ function JoinRoom(game, code, player) {
         }
     }
     else if (rooms[game][code].players[1].id === "") {
-        rooms[game][code].players[1].id = player.id;
-        io.to(player.id).emit("index", 1);
-        player.join(code);
+        rooms[game][code].players[1].id = player.socket.id;
+        rooms[game][code].players[1].user = player.user;
+        io.to(player.socket.id).emit("index", 1);
+        player.socket.join(code);
         if (rooms[game][code].players[0].id !== "") {
             SendRoomInfo(code, "battleship");
         }
@@ -230,13 +239,15 @@ function Battleship_Restart(code) {
                 id: rooms.battleship[code].players[0].id,
                 map: GenerateRandomMap(),
                 shots: [],
-                rematch: false
+                rematch: false,
+                user: rooms.battleship[code].players[0].user
             },
             {
                 id: rooms.battleship[code].players[1].id,
                 map: GenerateRandomMap(),
                 shots: [],
-                rematch: false
+                rematch: false,
+                user: rooms.battleship[code].players[1].user
             }
         ]
     }
@@ -245,15 +256,17 @@ function Battleship_Restart(code) {
 
 function Battleship_CheckForWinners(code) {
     let shipCount = 0;
-    battleships.map((shipNum) => shipCount+=shipNum);
+    battleships.forEach((ship) => shipCount += ship)
+    console.log(shipCount);
     rooms.battleship[code].players.map((player, idx) => {
         if (player.shots.length >= shipCount) {
             let shipsLeft = shipCount;
             player.shots.map((shot) => {
-                if (rooms.battleship[code].players[idx===0?1:0].map[shot[1]][shot[0]] === "ship") {
+                if (rooms.battleship[code].players[idx===0?1:0].map[shot[1]][shot[0]].length > 4) {
                     shipsLeft --;
                 }
             })
+            console.log("shipsleft:"+shipsLeft);
             if (shipsLeft <= 0) {
                 rooms.battleship[code].winner = idx;
                 return;
@@ -320,6 +333,16 @@ function Disconnect(id) {
         codes.splice(codeIdx, 1);
         io.to(code).emit("roomInfo");
     }
+    else {
+        for (let game in queues) {
+            queues[game].forEach((socket, idx) => {
+                if (socket.socket.id === id) {
+                    queues[game].splice(idx, 1);
+                    return;
+                }
+            })
+        }
+    }
 }
 
 function SendRoomInfo(code, game) {
@@ -330,18 +353,28 @@ io.on("connection", (socket) => {
     console.log(`${socket.id} Just Connected :)`);
     console.log(`Total Clients Connected: ${io.engine.clientsCount}`);
 
-    socket.on("qbattleship", () => {
-        queues.battleship.push(socket);
+    socket.on("qbattleship", (user) => {
+        console.log(user);
+        queues.battleship.push({
+            socket,
+            user
+        });
         socket.emit("roomInfo", {inQ: true});
         UpdateQueue("battleship");
     })
-    socket.on("createbattleship", () => {
+    socket.on("createbattleship", (user) => {
         let code = Battleship_CreateRoom();
-        JoinRoom("battleship", code, socket);
+        JoinRoom("battleship", code, {
+            socket,
+            user
+        });
     })
-    socket.on("Join", (game, code) => {
+    socket.on("Join", (game, code, user) => {
         if (rooms[game].hasOwnProperty(code)) {
-            JoinRoom(game, code, socket);
+            JoinRoom(game, code, socket, {
+                socket,
+                user
+            });
         }
         else {
             socket.emit("badCode")
