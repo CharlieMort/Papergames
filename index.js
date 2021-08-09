@@ -1,4 +1,3 @@
-console.log("first");
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
@@ -18,7 +17,6 @@ if (!(!process.env.NODE_ENV || process.env.NODE_ENV === "development")) {
     });
 }
 
-console.log("before")
 const userRouter = require("./routes/user");
 app.use("/api/user", userRouter);
 
@@ -39,7 +37,7 @@ const rooms = {
 }
 
 const codes = [];
-const battleships = [3,2];
+const battleships = [3,2,5,4,4];
 
 function MakeID() {
     const characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
