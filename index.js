@@ -3,6 +3,7 @@ const cors = require("cors");
 const http = require("http");
 const socketIO = require("socket.io");
 const path = require("path");
+const sqlite3 = require("sqlite3");
 
 const PORT = process.env.PORT || 5000;
 const app = express();
@@ -37,7 +38,7 @@ const rooms = {
 }
 
 const codes = [];
-const battleships = [3,2,5,4,4];
+const battleships = [3,2];
 
 function MakeID() {
     const characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -170,14 +171,16 @@ function Battleship_CreateRoom() {
                 map: GenerateRandomMap(),
                 shots: [],
                 rematch: false,
-                user: {}
+                user: {},
+                score: 0
             },
             {
                 id: "",
                 map: GenerateRandomMap(),
                 shots: [],
                 rematch: false,
-                user: {}
+                user: {},
+                score: 0
             }
         ]
     }
@@ -238,14 +241,16 @@ function Battleship_Restart(code) {
                 map: GenerateRandomMap(),
                 shots: [],
                 rematch: false,
-                user: rooms.battleship[code].players[0].user
+                user: rooms.battleship[code].players[0].user,
+                score: rooms.battleship[code].players[0].score
             },
             {
                 id: rooms.battleship[code].players[1].id,
                 map: GenerateRandomMap(),
                 shots: [],
                 rematch: false,
-                user: rooms.battleship[code].players[1].user
+                user: rooms.battleship[code].players[1].user,
+                score: rooms.battleship[code].players[1].score
             }
         ]
     }
@@ -255,7 +260,6 @@ function Battleship_Restart(code) {
 function Battleship_CheckForWinners(code) {
     let shipCount = 0;
     battleships.forEach((ship) => shipCount += ship)
-    console.log(shipCount);
     rooms.battleship[code].players.map((player, idx) => {
         if (player.shots.length >= shipCount) {
             let shipsLeft = shipCount;
@@ -267,6 +271,7 @@ function Battleship_CheckForWinners(code) {
             console.log("shipsleft:"+shipsLeft);
             if (shipsLeft <= 0) {
                 rooms.battleship[code].winner = idx;
+                rooms.battleship[code].players[idx].score ++;
                 return;
             }
         }
@@ -319,6 +324,29 @@ function GetGameAndCode(id) {
     }
 }
 
+function Addscore(user, add) {
+    let db = new sqlite3.Database("./userinfo.db");
+    let stmt = `SELECT score FROM login WHERE username = "${user.username}";`;
+    db.all(stmt, (err, rows) => {
+        if (err) {
+            console.error(err);
+            return;
+        }
+        console.log(rows[0]);
+        let score = parseInt(rows[0].score);
+        console.log(add);
+        score += add;
+        console.log(score);
+        let stmt2 = `UPDATE login SET score = ${score} WHERE username = "${user.username}";`;
+        db.run(stmt2, (err) => {
+            if (err) {
+                console.log(err);
+            }
+        })
+    })
+    db.close();
+}
+
 function Disconnect(id) {
     console.log("Disconnecting");
     let gc = GetGameAndCode(id);
@@ -326,6 +354,9 @@ function Disconnect(id) {
         gc = gc.split(" ");
         let game = gc[0];
         let code = gc[1];
+        rooms[game][code].players.forEach((player) => {
+            if (!player.user.guest) Addscore(player.user, player.score);
+        })
         delete rooms[game][code];
         let codeIdx = codes.indexOf(code);
         codes.splice(codeIdx, 1);
@@ -369,7 +400,7 @@ io.on("connection", (socket) => {
     })
     socket.on("Join", (game, code, user) => {
         if (rooms[game].hasOwnProperty(code)) {
-            JoinRoom(game, code, socket, {
+            JoinRoom(game, code, {
                 socket,
                 user
             });

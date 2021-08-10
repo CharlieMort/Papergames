@@ -3,7 +3,7 @@ const sqlite3 = require("sqlite3");
 
 router.route("/").get((req, res) => {
     let db = new sqlite3.Database("./userinfo.db");
-    let stmt = `SELECT id, username FROM login ORDER BY id;`;
+    let stmt = `SELECT * FROM login ORDER BY id;`;
     db.all(stmt, (err, rows) => {
         if (err) {
             console.error(err);
@@ -30,7 +30,7 @@ router.route("/signup").post((req, res) => {
     db.close();
 })
 
-router.route("/:id").get((req, res) => {
+router.route("/login/id/:id").get((req, res) => {
     let db = new sqlite3.Database("./userinfo.db");
     let stmt = `SELECT * FROM login WHERE id = ${req.params.id}`;
     db.all(stmt, (err, rows) => {
@@ -44,7 +44,7 @@ router.route("/:id").get((req, res) => {
     db.close();
 })
 
-router.route("/login/:username").get((req, res) => {
+router.route("/login/username/:username").get((req, res) => {
     let db = new sqlite3.Database("./userinfo.db");
     let stmt = `SELECT * FROM login WHERE username = "${req.params.username}";`;
     db.all(stmt, (err, rows) => {
@@ -58,7 +58,8 @@ router.route("/login/:username").get((req, res) => {
     db.close();
 })
 
-router.route("/addscore").get((req, res) => {
+router.route("/addscore/:username").get((req, res) => {
+    console.log(req.params.username);
     let db = new sqlite3.Database("./userinfo.db");
     let stmt = `SELECT score FROM login WHERE username = "${req.params.username}";`;
     db.all(stmt, (err, rows) => {
@@ -67,9 +68,10 @@ router.route("/addscore").get((req, res) => {
             return;
         }
         console.log(rows[0]);
-        let score = parseInt(rows[0]);
+        let score = parseInt(rows[0].score);
         score ++;
-        let stmt2 = `INSERT INTO login(score) VALUES(${score});`;
+        console.log(score);
+        let stmt2 = `UPDATE login SET score = ${score} WHERE username = "${req.params.username}";`;
         db.run(stmt2, (err) => {
             if (err) {
                 res.send("2");
@@ -77,6 +79,19 @@ router.route("/addscore").get((req, res) => {
             }
             else res.send("New Score:"+score);
         })
+    })
+    db.close();
+})
+
+router.route("/leaderboard").get((req, res) => {
+    let db = new sqlite3.Database("./userinfo.db");
+    let stmt = "SELECT username, score FROM login ORDER BY score DESC LIMIT 5";
+    db.all(stmt, (err, rows) => {
+        if (err) {
+            console.error(err);
+            return;
+        }
+        res.send(rows);
     })
     db.close();
 })
