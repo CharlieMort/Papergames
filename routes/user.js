@@ -58,34 +58,22 @@ router.route("/login/username/:username").get((req, res) => {
     db.close();
 })
 
-router.route("/addscore/:username").get((req, res) => {
-    console.log(req.params.username);
+router.route("/leaderboard/battleship").get((req, res) => {
     let db = new sqlite3.Database("./userinfo.db");
-    let stmt = `SELECT score FROM login WHERE username = "${req.params.username}";`;
+    let stmt = "SELECT username, battleshipScore FROM login ORDER BY battleshipScore DESC LIMIT 5";
     db.all(stmt, (err, rows) => {
         if (err) {
             console.error(err);
             return;
         }
-        console.log(rows[0]);
-        let score = parseInt(rows[0].score);
-        score ++;
-        console.log(score);
-        let stmt2 = `UPDATE login SET score = ${score} WHERE username = "${req.params.username}";`;
-        db.run(stmt2, (err) => {
-            if (err) {
-                res.send("2");
-                console.log(err);
-            }
-            else res.send("New Score:"+score);
-        })
+        res.send(rows);
     })
     db.close();
 })
 
-router.route("/leaderboard").get((req, res) => {
+router.route("/leaderboard/tictactoe").get((req, res) => {
     let db = new sqlite3.Database("./userinfo.db");
-    let stmt = "SELECT username, score FROM login ORDER BY score DESC LIMIT 5";
+    let stmt = "SELECT username, tictactoeScore FROM login ORDER BY tictactoeScore DESC LIMIT 5";
     db.all(stmt, (err, rows) => {
         if (err) {
             console.error(err);

@@ -30,11 +30,13 @@ const io = socketIO(server, {
 });
 
 const queues = {
-    battleship: []
+    battleship: [],
+    tictactoe: []
 }
 
 const rooms = {
-    battleship: {}
+    battleship: {},
+    tictactoe: {}
 }
 
 const codes = [];
@@ -147,9 +149,15 @@ function UpdateQueue(game) {
     for (let i = 0; i<pairs; i++) {
         switch(game) {
             case "battleship":
-                let code = Battleship_CreateRoom();
-                JoinRoom("battleship", code, queues.battleship[i*2]);
-                JoinRoom("battleship", code, queues.battleship[i*2+1]);
+                let bCode = Battleship_CreateRoom();
+                JoinRoom("battleship", bCode, queues.battleship[i*2]);
+                JoinRoom("battleship", bCode, queues.battleship[i*2+1]);
+                break;
+            case "tictactoe":
+                let tCode = Tictactoe_CreateRoom();
+                JoinRoom("tictactoe", tCode, queues.tictactoe[i*2]);
+                JoinRoom("tictactoe", tCode, queues.tictactoe[i*2+1]);
+                break;
 
         }
         queues[game].splice(i*2, 2);    
@@ -210,7 +218,7 @@ function JoinRoom(game, code, player) {
         io.to(player.socket.id).emit("index", 1);
         player.socket.join(code);
         if (rooms[game][code].players[0].id !== "") {
-            SendRoomInfo(code, "battleship");
+            SendRoomInfo(code, game);
         }
         else {
             io.to(code).emit("roomInfo", {
@@ -219,12 +227,20 @@ function JoinRoom(game, code, player) {
             })
         }
     }
+    console.log(rooms[game][code]);
 }
 
 function RematchRequest(code, game, idx) {
     rooms[game][code].players[idx].rematch = true;
     if (rooms[game][code].players[0].rematch && rooms[game][code].players[1].rematch) {
-        Battleship_Restart(code);
+        switch(game) {
+            case "battleship":
+                Battleship_Restart(code);
+                break;
+            case "tictactoe":
+                Tictactoe_Restart(code);
+                break;
+        }
     }
     SendRoomInfo(code, game);
 }
@@ -309,6 +325,106 @@ function Battleship_Shoot(code, coords) {
     SendRoomInfo(code, "battleship");
 }
 
+function Tictactoe_CreateRoom() {
+    let code = MakeID();
+    while (codes.includes(code)) code = MakeID();
+    codes.push(code);
+    rooms.tictactoe[code] = {
+        game: "tictactoe",
+        code: code,
+        turn: 0,
+        winner: 2,
+        map: [
+            ["","",""],
+            ["","",""],
+            ["","",""]
+        ],
+        players:[
+            {
+                id: "",
+                rematch: false,
+                user: {},
+                score: 0
+            },
+            {
+                id: "",
+                rematch: false,
+                user: {},
+                score: 0
+            }
+        ]
+    }
+    return code;
+}
+
+function Tictactoe_Shoot(code, coords) {
+    if (rooms.tictactoe[code].map[coords[1]][coords[0]] === "") {
+        rooms.tictactoe[code].map[coords[1]][coords[0]] = rooms.tictactoe[code].turn===0?"x":"o";
+        rooms.tictactoe[code].turn = rooms.tictactoe[code].turn===0?1:0;
+        Tictactoe_CheckForWinners(code);
+        SendRoomInfo(code, "tictactoe");
+    }
+}
+
+function Tictactoe_CheckForWinners(code) {
+    const lines = [
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+        [0, 3, 6],
+        [1, 4, 7],
+        [2, 5, 8],
+        [0, 4, 8],
+        [2, 4, 6]
+    ];
+    let map = [];
+    rooms.tictactoe[code].map.forEach((row) => {
+        row.forEach((cell) => {
+            map.push(cell);
+        });
+    });
+    for (let i = 0; i<lines.length; i++) {
+        const [a, b, c] = lines[i];
+        if (map[a] && 
+            map[a] == map[b] && 
+            map[a] == map[c]) {
+            rooms.tictactoe[code].winner = rooms.tictactoe[code].turn===0?1:0;
+            rooms.tictactoe[code].players[rooms.tictactoe[code].turn===0?1:0].score++;
+            return;
+        }
+    }
+}
+
+function Tictactoe_Restart(code) {
+    rooms.tictactoe[code] = {
+        game: "tictactoe",
+        code: code,
+        turn: rooms.tictactoe[code].turn===0?1:0,
+        winner: 2,
+        map: [
+            ["","",""],
+            ["","",""],
+            ["","",""]
+        ],
+        players:[
+            {
+                id: rooms.tictactoe[code].players[0].id,
+                rematch: false,
+                user: rooms.tictactoe[code].players[0].user,
+                score: rooms.tictactoe[code].players[0].score
+            },
+            {
+                id: rooms.tictactoe[code].players[1].id,
+                rematch: false,
+                user: rooms.tictactoe[code].players[1].user,
+                score: rooms.tictactoe[code].players[1].score
+            }
+        ]
+    }
+    rooms.tictactoe[code].turn = rooms.tictactoe[code].turn===0?1:0;
+    SendRoomInfo(code, "tictactoe");
+}
+
 function GetGameAndCode(id) {
     var game;
     var code;
@@ -324,20 +440,20 @@ function GetGameAndCode(id) {
     }
 }
 
-function Addscore(user, add) {
+function Addscore(user, add, game) {
     let db = new sqlite3.Database("./userinfo.db");
-    let stmt = `SELECT score FROM login WHERE username = "${user.username}";`;
+    let stmt = `SELECT ${game}Score FROM login WHERE username = "${user.username}";`;
     db.all(stmt, (err, rows) => {
         if (err) {
             console.error(err);
             return;
         }
         console.log(rows[0]);
-        let score = parseInt(rows[0].score);
+        let score = parseInt(rows[0][`${game}Score`]);
         console.log(add);
         score += add;
         console.log(score);
-        let stmt2 = `UPDATE login SET score = ${score} WHERE username = "${user.username}";`;
+        let stmt2 = `UPDATE login SET ${game}Score = ${score} WHERE username = "${user.username}";`;
         db.run(stmt2, (err) => {
             if (err) {
                 console.log(err);
@@ -355,7 +471,7 @@ function Disconnect(id) {
         let game = gc[0];
         let code = gc[1];
         rooms[game][code].players.forEach((player) => {
-            if (!player.user.guest) Addscore(player.user, player.score);
+            if (!player.user.guest) Addscore(player.user, player.score, game);
         })
         delete rooms[game][code];
         let codeIdx = codes.indexOf(code);
@@ -406,6 +522,7 @@ io.on("connection", (socket) => {
             });
         }
         else {
+            console.log("BadCode");
             socket.emit("badCode")
         }
     })
@@ -414,6 +531,27 @@ io.on("connection", (socket) => {
     })
     socket.on("b_rematch", (code, idx) => {
         RematchRequest(code, "battleship", idx);
+    })
+    socket.on("qtictactoe", (user) => {
+        queues.tictactoe.push({
+            socket,
+            user
+        })
+        socket.emit("roomInfo", {inQ: true});
+        UpdateQueue("tictactoe");
+    })
+    socket.on("createtictactoe", (user) => {
+        let code = Tictactoe_CreateRoom();
+        JoinRoom("tictactoe", code, {
+            socket,
+            user
+        });
+    })
+    socket.on("t_shoot", (code, coords) => {
+        Tictactoe_Shoot(code, coords);
+    })
+    socket.on("t_rematch", (code, idx) => {
+        RematchRequest(code, "tictactoe", idx);
     })
     socket.on("reject", () => {
         Disconnect(socket.id);
