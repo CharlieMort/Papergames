@@ -378,11 +378,19 @@ function Tictactoe_CheckForWinners(code) {
         [2, 4, 6]
     ];
     let map = [];
+    let count = 0;
     rooms.tictactoe[code].map.forEach((row) => {
         row.forEach((cell) => {
             map.push(cell);
+            if (cell !== "") {
+                count++;
+            }
         });
     });
+    if (count >= 9) {
+        rooms.tictactoe[code].winner = 3;
+        return;
+    }
     for (let i = 0; i<lines.length; i++) {
         const [a, b, c] = lines[i];
         if (map[a] && 
