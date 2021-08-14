@@ -31,16 +31,18 @@ const io = socketIO(server, {
 
 const queues = {
     battleship: [],
-    tictactoe: []
+    tictactoe: [],
+    connect4: []
 }
 
 const rooms = {
     battleship: {},
-    tictactoe: {}
+    tictactoe: {},
+    connect4: {}
 }
 
 const codes = [];
-const battleships = [3,2];
+const battleships = [3,2,4,4,5];
 
 function MakeID() {
     const characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -158,6 +160,11 @@ function UpdateQueue(game) {
                 JoinRoom("tictactoe", tCode, queues.tictactoe[i*2]);
                 JoinRoom("tictactoe", tCode, queues.tictactoe[i*2+1]);
                 break;
+            case "connect4":
+                let cCode = Connect4_CreateRoom();
+                JoinRoom("connect4", cCode, queues.connect4[i*2]);
+                JoinRoom("connect4", cCode, queues.connect4[i*2+1]);
+                break;
 
         }
         queues[game].splice(i*2, 2);    
@@ -239,6 +246,9 @@ function RematchRequest(code, game, idx) {
                 break;
             case "tictactoe":
                 Tictactoe_Restart(code);
+                break;
+            case "connect4":
+                Connect4_Restart(code);
                 break;
         }
     }
@@ -433,6 +443,188 @@ function Tictactoe_Restart(code) {
     SendRoomInfo(code, "tictactoe");
 }
 
+function Connect4_CreateRoom() {
+    let code = MakeID();
+    while (codes.includes(code)) code = MakeID();
+    codes.push(code);
+    rooms.connect4[code] = {
+        game: "connect4",
+        code: code,
+        turn: 0,
+        winner: 2,
+        map: [
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+        ],
+        players:[
+            {
+                id: "",
+                rematch: false,
+                user: {},
+                score: 0
+            },
+            {
+                id: "",
+                rematch: false,
+                user: {},
+                score: 0
+            }
+        ]
+    }
+    return code;
+}
+
+function Connect4_Shoot(code, coords) {
+    let idy;
+    for (let i = 5; i>=0; i--) {
+        if (rooms.connect4[code].map[i][coords[0]] === "") {
+            idy = i;
+            break;
+        }
+    }
+    if (idy !== undefined) {
+        rooms.connect4[code].map[idy][coords[0]] = rooms.connect4[code].turn===0?"light":"dark";
+        rooms.connect4[code].turn = rooms.connect4[code].turn===0?1:0;
+        Connect4_CheckForWinners(code);
+        SendRoomInfo(code, "connect4");
+    }
+}
+
+function Connect4_CheckForWinners(code) {
+    const winningCombos = [
+        [0, 1, 2, 3],
+        [41, 40, 39, 38],
+        [7, 8, 9, 10],
+        [34, 33, 32, 31],
+        [14, 15, 16, 17],
+        [27, 26, 25, 24],
+        [21, 22, 23, 24],
+        [20, 19, 18, 17],
+        [28, 29, 30, 31],
+        [13, 12, 11, 10],
+        [35, 36, 37, 38],
+        [6, 5, 4, 3],
+        [0, 7, 14, 21],
+        [41, 34, 27, 20],
+        [1, 8, 15, 22],
+        [40, 33, 26, 19],
+        [2, 9, 16, 23],
+        [39, 32, 25, 18],
+        [3, 10, 17, 24],
+        [38, 31, 24, 17],
+        [4, 11, 18, 25],
+        [37, 30, 23, 16],
+        [5, 12, 19, 26],
+        [36, 29, 22, 15],
+        [6, 13, 20, 27],
+        [35, 28, 21, 14],
+        [0, 8, 16, 24],
+        [41, 33, 25, 17],
+        [7, 15, 23, 31],
+        [34, 26, 18, 10],
+        [14, 22, 30, 38],
+        [27, 19, 11, 3],
+        [35, 29, 23, 17],
+        [6, 12, 18, 24],
+        [28, 22, 16, 10],
+        [13, 19, 25, 31],
+        [21, 15, 9, 3],
+        [20, 26, 32, 38],
+        [36, 30, 24, 18],
+        [5, 11, 17, 23],
+        [37, 31, 25, 19],
+        [4, 10, 16, 22],
+        [2, 10, 18, 26],
+        [39, 31, 23, 15],
+        [1, 9, 17, 25],
+        [40, 32, 24, 16],
+        [9, 17, 25, 33],
+        [8, 16, 24, 32],
+        [11, 17, 23, 29],
+        [12, 18, 24, 30],
+        [1, 2, 3, 4],
+        [5, 4, 3, 2],
+        [8, 9, 10, 11],
+        [12, 11, 10, 9],
+        [15, 16, 17, 18],
+        [19, 18, 17, 16],
+        [22, 23, 24, 25],
+        [26, 25, 24, 23],
+        [29, 30, 31, 32],
+        [33, 32, 31, 30],
+        [36, 37, 38, 39],
+        [40, 39, 38, 37],
+        [7, 14, 21, 28],
+        [8, 15, 22, 29],
+        [9, 16, 23, 30],
+        [10, 17, 24, 31],
+        [11, 18, 25, 32],
+        [12, 19, 26, 33],
+        [13, 20, 27, 34],
+    ];
+    let map = [];
+    let count = 0;
+    rooms.connect4[code].map.forEach((row) => {
+        row.forEach((cell) => {
+            map.push(cell);
+            if (cell !== "") {
+                count ++;
+            }
+        })
+    });
+    if (count >= 42) {
+        rooms.connect4[code].winner = 3;
+        SendRoomInfo(code, "connect4");
+        return;
+    }
+    for (let combo of winningCombos) {
+        let vals = [map[combo[0]], map[combo[1]], map[combo[2]], map[combo[3]]];
+        if (vals[0] === vals[1] && vals[1] === vals[2] && vals[2] === vals[3] && vals[0] !== "") {
+            rooms.connect4[code].winner = vals[0]==="light"?0:1;
+            rooms.connect4[code].players[rooms.connect4[code].turn===0?1:0].score++;
+            SendRoomInfo(code, "connect4");
+            return;
+        } 
+    }
+}
+
+function Connect4_Restart(code) {
+    rooms.connect4[code] = {
+        game: "connect4",
+        code: code,
+        turn: rooms.connect4[code].turn===0?1:0,
+        winner: 2,
+        map: [
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+            ["","","","","","",""],
+        ],
+        players:[
+            {
+                id: rooms.connect4[code].players[0].id,
+                rematch: false,
+                user: rooms.connect4[code].players[0].user,
+                score: rooms.connect4[code].players[0].score
+            },
+            {
+                id: rooms.connect4[code].players[1].id,
+                rematch: false,
+                user: rooms.connect4[code].players[1].user,
+                score: rooms.connect4[code].players[1].score
+            }
+        ]
+    }
+    rooms.connect4[code].turn = rooms.connect4[code].turn===0?1:0;
+    SendRoomInfo(code, "connect4");
+}
+
 function GetGameAndCode(id) {
     var game;
     var code;
@@ -560,6 +752,27 @@ io.on("connection", (socket) => {
     })
     socket.on("t_rematch", (code, idx) => {
         RematchRequest(code, "tictactoe", idx);
+    })
+    socket.on("qconnect4", (user) => {
+        queues.connect4.push({
+            socket,
+            user
+        })
+        socket.emit("roomInfo", {inQ: true});
+        UpdateQueue("connect4");
+    })
+    socket.on("createconnect4", (user) => {
+        let code = Connect4_CreateRoom();
+        JoinRoom("connect4", code, {
+            socket,
+            user
+        });
+    })
+    socket.on("c_shoot", (code, coords) => {
+        Connect4_Shoot(code, coords);
+    })
+    socket.on("c_rematch", (code, idx) => {
+        RematchRequest(code, "connect4", idx);
     })
     socket.on("reject", () => {
         Disconnect(socket.id);

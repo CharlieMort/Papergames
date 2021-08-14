@@ -84,4 +84,17 @@ router.route("/leaderboard/tictactoe").get((req, res) => {
     db.close();
 })
 
+router.route("/leaderboard/connect4").get((req, res) => {
+    let db = new sqlite3.Database("./userinfo.db");
+    let stmt = "SELECT username, connect4Score FROM login ORDER BY connect4Score DESC LIMIT 5";
+    db.all(stmt, (err, rows) => {
+        if (err) {
+            console.error(err);
+            return;
+        }
+        res.send(rows);
+    })
+    db.close();
+})
+
 module.exports = router;
